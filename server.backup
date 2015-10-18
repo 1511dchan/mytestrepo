@@ -1,0 +1,11 @@
+#!/bin/bash
+a1=/root/script/myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#lxcBackup tftp
+#lxcBackup smb
+#lxcBackup seafile
+
+lxcBackup www
+#pgsqlBackup postgres.cln.su
+pgsqlBackup 1c.it.cln.su
+pgsqlBackup 1c.buhu4et.cln.su

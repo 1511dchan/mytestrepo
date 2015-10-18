@@ -1,0 +1,15 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+lxc_command="lxc" # Будет ли установка внутри контейнера или в реальной машине. Если оставить пустую строку, то установка будет в реальной машине
+lxc_name="smb" # Название контейнера
+user_name="ss" # Имя пользователя
+user_pass="0987654321" # Пароль пользователя
+
+smbPassChange $user_name $user_pass $lxc_command $lxc_name
+
+smbPassChange brevnove 89104990010 $lxc_command $lxc_name
+smbPassChange brevnovm 89104990017 $lxc_command $lxc_name
+smbPassChange samoloval 89161591076 $lxc_command $lxc_name
+smbPassChange service 5028010 $lxc_command $lxc_name
+smbPassChange yakovleva 89104990019 $lxc_command $lxc_name

@@ -1,0 +1,6 @@
+#!/bin/bash
+sudo virt-install --connect qemu:///system -n ubuntu -r 2048 -f /dev/vg0/ubuntu -s 50 -c /kvm/ubuntu-12.04.4-desktop-amd64.iso  --os-type linux --os-variant ubuntuprecise --accelerate --vnc -w bridge:br0
+
+sudo virt-install --connect qemu:///system -n winn -r 4096 -f /dev/vg0/winn -s 100 -c /kvm/m0nkrus.x64.Modern.Boot.DVD.v13.iso  --os-type=windows --os-variant=win7 --accelerate --vnc -w bridge:br0
+
+virt-install --connect qemu:///system -n catalog -r 4096 -vcpus=2 -f /root/catalog/Gruzoviki_04-2015/system.img --os-type=windows --os-variant=winxp --accelerate --vnc -w bridge:br0

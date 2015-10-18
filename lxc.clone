@@ -1,0 +1,43 @@
+#!/bin/bash
+#a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#lxcClone 1c
+#lxcClone mx
+
+#lxcClone win
+
+pv -tpreb /dev/vg0/voip | dd of=/backup/test.iso
+
+
+
+
+
+
+
+
+lxc-stop -n 1cg-buhu4et
+#dd if=/backup/1c.iso of=/dev/vg0/1cg-buhu4et
+pv -tpreb /backup/1c.iso | dd of=/dev/vg0/1cg-buhu4et
+e2fsck -f /dev/vg0/1cg-buhu4et -y
+mount /dev/vg0/1cg-buhu4et /mnt
+cp /root/1cg-buhu4et/hostname /mnt/etc/hostname
+cp /root/1cg-buhu4et/hosts /mnt/etc/hosts
+cp /root/1cg-buhu4et/interfaces /mnt/etc/network/interfaces
+umount /mnt
+lxc-start -n 1cg-buhu4et -d
+
+
+
+
+
+
+
+
+
+
+virsh destroy win-buhu4et
+sleep 10
+dd if=/backup/win.iso of=/dev/vg0/win-buhu4et
+e2fsck -f /dev/vg0/win-buhu4et -y 
+virsh start win-buhu4et
+

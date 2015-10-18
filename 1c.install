@@ -1,0 +1,27 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+lxc_command="lxc" # Будет ли установка внутри контейнера или в реальной машине. Если оставить пустую строку, то установка будет в реальной машине
+lxc_name="1c" # Название контейнера
+host_name="1c.it.cln.su" # Имя хоста внутри виртуальной машины
+arch="x32" # Архитектура контейнера
+lxc_size="30G" # Размер контейнера
+postgres_ver="9.3.4" # Версия postgres
+postgres_pass="PrestigePostgres" # Пароль от базы данных postgres
+version_1c="8.3.6.2014" # Версия сервера 1С
+
+
+lxc-stop -n $lxc_name
+lxc-destroy -n $lxc_name
+lxcCreate $lxc_name $lxc_size $arch
+
+lxcHosts localhost $lxc_command $lxc_name
+lxcHosts $host_name $lxc_command $lxc_name
+lxcNetwork $host_name $lxc_command $lxc_name
+
+pgsqlUninstall $lxc_command $lxc_name
+pgsqlInstall $postgres_ver $postgres_pass $lxc_command $lxc_name
+
+f1cUninstall $lxc_command $lxc_name
+f1cInstall $version_1c $lxc_command $lxc_name
+f1cCrack $lxc_command $lxc_name

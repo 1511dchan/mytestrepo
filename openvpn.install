@@ -1,0 +1,6 @@
+
+/etc/openvpn/genkey/build-key-pkcs12 guest
+/etc/openvpn/genkey/build-key-pkcs12 manager
+service openvpn restart
+service openvpn status
+

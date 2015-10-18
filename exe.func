@@ -1,0 +1,41 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#pgsqlUninstall
+#pgsqlInstall BrizPostgres
+#f1cUninstall
+#f1cInstall 1c
+#lxcCreate 1cg
+#f1cwww 1c punf
+#f1cwww 1c briz
+#f1cwww 1c left
+#f1cwww 1c yspex
+#f1cwww 1c prestige-demo
+#openvpnGen gwk.it
+
+#f1cClient 8.3.4 496
+#pgsqlBackupPrepare
+
+
+
+ssh -p22222 root@148.251.151.78 rm /backup/*.iso
+ssh -p22222 root@148.251.151.78 /root/script/lxc.clone
+rm /backup/*.iso
+
+scp -r -P22222 root@148.251.151.78:/backup/*.iso /backup/
+
+lxc-stop -n 1cg-buhu4et
+pv -tpreb /backup/1c.iso | dd of=/dev/vg0/1cg-buhu4et
+e2fsck -f /dev/vg0/1cg-buhu4et -y
+mount /dev/vg0/1cg-buhu4et /mnt
+cp /root/1cg-buhu4et/hostname /mnt/etc/hostname
+cp /root/1cg-buhu4et/hosts /mnt/etc/hosts
+cp /root/1cg-buhu4et/interfaces /mnt/etc/network/interfaces
+umount /mnt
+lxc-start -n 1cg-buhu4et -d
+
+virsh destroy win-buhu4et
+sleep 10
+pv -tpreb /backup/win.iso | dd of=/dev/vg0/win-buhu4et
+#e2fsck -f /dev/vg0/win-buhu4et -y 
+virsh start win-buhu4et

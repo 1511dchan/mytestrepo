@@ -1,0 +1,32 @@
+sudo gpg --keyserver subkeys.pgp.net --recv-key 0FC6984B
+sudo gpg --export --armor 0FC6984B | sudo apt-key add -
+
+/etc/apt/sources.list
+
+echo "# Opsview packages
+deb http://downloads.opsview.com/opsview-core/latest/apt precise main" >> /etc/apt/sources.list
+
+apt-get update && sudo apt-get install opsview
+
+cp /usr/local/nagios/installer/apache_proxy.conf /etc/apache2/sites-available/opsview
+a2ensite opsview
+a2dissite default
+
+apt-get install libapache2-mod-proxy-html
+a2enmod proxy
+a2enmod proxy_http
+a2enmod proxy_html
+
+/etc/init.d/apache2 restart
+
+#sed -i '/local/s/trust/table_cache = 768/g' /etc/mysql/my.cnf
+#sed -i '/local/s/trust/query_cache_size = 16M/g' /etc/mysql/my.cnf
+#sed -i '/local/s/trust/key_buffer = 256M/g' /etc/mysql/my.cnf
+#sed -i '/local/s/trust/max_allowed_packet = 32M/g' /etc/mysql/my.cnf
+
+#echo "innodb_buffer_pool_size = 1024M
+#innodb_file_per_table = 1
+#innodb_flush_log_at_trx_commit = 2
+#innodb_autoinc_lock_mode=0" >> /etc/mysql/my.cnf
+
+service mysql restart

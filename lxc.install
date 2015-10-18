@@ -1,0 +1,16 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#lxcCreate 1c 20G precise x32
+#lxcCreate www 100G
+#lxcCreate mx 250G
+#lxcCreate voip 5G
+#lxcCreate 1c 30G
+#lxcCreate postgres 5G
+#lxcCreate postgres 5G trusty x32
+
+#lxcCreate mx-buhu4et 100G precise x32
+#lxcCreate 1cg-buhu4et 15G x32
+#lxcCreate postfix 5G
+#lxcCreate smb 100G
+lxcCreate observium 10G

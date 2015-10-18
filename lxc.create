@@ -1,0 +1,19 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+lxc_command="lxc" # Будет ли установка внутри контейнера или в реальной машине. Если оставить пустую строку, то установка будет в реальной машине
+lxc_name="git" # Название контейнера
+host_name="git.it.cln.su" # Имя хоста внутри виртуальной машины
+arch="x64" # Архитектура контейнера
+lxc_size="5G" # Размер контейнера
+release="" # Релиз операционной системы Ubuntu
+
+
+#lxc-stop -n $lxc_name
+#lxc-destroy -n $lxc_name
+lxcCreate $lxc_name $lxc_size $release $arch
+
+lxcHosts localhost $lxc_command $lxc_name
+lxcHosts $host_name $lxc_command $lxc_name
+lxcNetwork $host_name $lxc_command $lxc_name
+

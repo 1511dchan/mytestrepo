@@ -1,0 +1,17 @@
+#!/bin/sh
+
+echo "Остановка виртуальной машины" - $1
+#lxc-shutdown -n $1
+#echo "Жду 120 секунд"
+#sleep 120
+# заносим в переменную DATE текущую дату 
+DATE=`/bin/date '+%d.%m.%Y'`
+echo "Начинаем архивацию в файл "$1"-"$DATE".tar.gz"
+mount /dev/mapper/vg0-$1 /mnt
+tar -cvzf /backup/www/$1-$DATE.tar.gz /mnt/
+# удаляем архивы, которым уже больше 7 дней
+echo "удаляем архивы, которым уже больше 15 дней"
+/usr/bin/find /backup/www -type f -atime +15 -exec rm -f \{\} \; >/dev/null 2>&1
+echo "Запуск виртуальной машины"
+umount /dev/mapper/vg0-$1
+lxc-start -n $1 -d

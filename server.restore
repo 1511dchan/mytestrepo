@@ -1,0 +1,43 @@
+#!/bin/bash
+a1=/root/script/myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#pgsqlRestore 1c.it.cln.su 1c.it.cln.su 09.01.2015
+#pgsqlRestore 1c.buhu4et.cln.su 1c.buhu4et.cln.su 11.01.2015
+
+#SERVER="1c.buhu4et.cln.su"
+#BASEDUMP="rsk"
+#BASERESTORE="test"
+
+#mkdir /backup/pgsql/dump-restore/
+#rm -r /backup/pgsql/dump-restore/*
+#pg_dump -h $SERVER -U postgres -Ft -w "$BASEDUMP" > /backup/pgsql/dump-restore/temp.dump
+#dropdb -h $SERVER -U postgres -w "$BASERESTORE"
+#createdb -h $SERVER -U postgres -w "$BASERESTORE"
+#pg_restore -h $SERVER -U postgres -w -d "$BASERESTORE" /backup/pgsql/dump-restore/temp.dump
+
+#______________________________________________________________________________________________
+
+#SERVER="1c.it.cln.su"
+#BASEDUMP="prestige"
+#BASERESTORE="prestige"
+#DATE="25.07.2015"
+
+#dropdb -h $SERVER -U postgres -w "$BASERESTORE"
+#createdb -h $SERVER -U postgres -w "$BASERESTORE"
+#pg_restore -h $SERVER -U postgres -w -d "$BASERESTORE" /backup/pgsql/$SERVER-$DATE/"$BASEDUMP".dump
+
+#______________________________________________________________________________________________
+
+pgsqlRestore 1c.it.cln.su 1c.it.cln.su 25.07.2015
+
+#mkdir /backup/pgsql/dump-restore/
+#rm -r /backup/pgsql/dump-restore/*
+#pg_dump -h $SERVER -U postgres -Ft -w "$BASEDUMP" > /backup/pgsql/dump-restore/temp.dump
+#dropdb -h $SERVER -U postgres -w "$BASERESTORE"
+#createdb -h $SERVER -U postgres -w "$BASERESTORE"
+#pg_restore -h $SERVER -U postgres -w -d "$BASERESTORE" /backup/pgsql/1c.it.cln.su-31.03.2015/"$BASERESTORE".dump
+
+
+#dropdb -h 1c.it.cln.su -U postgres -w "kp"
+#createdb -h 1c.it.cln.su -U postgres -w "kp"
+#pg_restore -h 1c.it.cln.su -U postgres -w -d "kp" /backup/pgsql/1c.it.cln.su-31.03.2015/kp.dump

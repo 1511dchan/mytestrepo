@@ -1,0 +1,148 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#while [ 1 ] ; do
+#   if [ "$1" = "--yes" ] ; then
+#      pYes=1
+#   elif [ "${1#--source-file=}" != "$1" ] ; then
+#      pSourceFile="${1#--source-file=}"
+#   elif [ "$1" = "-sf" ] ; then
+#		shift ; pSourceFile="$1"
+#   elif [ "${1#--dest-file=}" != "$1" ] ; then
+#      pDestFile="${1#--dest-file=}"
+#   elif [ "$1" = "-df" ] ; then
+#		shift ; pDestFile="$1"
+#   elif [ -z "$1" ] ; then
+#      break # Ключи кончились
+#   else
+#      echo "Ошибка: неизвестный ключ" 1>&2
+#      exit 1
+#   fi
+#   shift
+#done
+#
+#checkParm "$pSourceFile" "Не задан исходный файл"
+#checkParm "$pDestFile" "Не задан выходной файл"
+#
+#if [ "$pYes" != "1" ] ; then
+#	myAskYNE "Ты уверен, что хочешь запустить это?"
+#fi
+#echo "source=$pSourceFile, destination=$pDestFile"
+#
+
+
+while [ 1 ] ; do
+   if [ "$1" = "--yes" ] ; then
+      pYes=1
+   elif procParmS "-sf" "$1" "$2" ; then
+		pSourceFile="$cRes" ; shift
+   elif procParmL "--source-file" "$1" ; then
+		pSourceFile="$cRes"
+   elif procParmS "-df" "$1" "$2" ; then
+		pDestFile="$cRes" ; shift
+   elif procParmL "--dest-file" "$1" ; then
+		pDestFile="$cRes"
+   elif [ -z "$1" ] ; then
+      break # Ключи кончились
+   else
+      echo "Ошибка: неизвестный ключ" 1>&2
+      exit 1
+   fi
+   shift
+done
+
+checkParm "$pSourceFile" "Не задан исходный файл"
+checkParm "$pDestFile" "Не задан выходной файл"
+
+if [ "$pYes" != "1" ] ; then
+	myAskYNE "Ты уверен, что хочешь запустить это?"
+fi
+echo "source=$pSourceFile, destination=$pDestFile"
+
+
+
+
+
+
+#cat <<'EOF'
+#Выбери желаемое действие:
+#------------------------
+#   a) Действие 1
+#   b) Действие 2
+#   .) Выход
+#EOF
+#input1 "Твой выбор: " "ab."
+#echo "Выбор был: $cRes"
+
+
+# определяем рабочую директорию
+WorkDir=`pwd`
+
+# определяем директорию где расположен скрипт с конфигом и возвращаемся обратно
+MyDir=`cd -P "$(dirname "$0")" && pwd && cd "$WorkDir"`
+
+# читаем конфиг
+. "$MyDir"/openvpn.cfg
+
+# далее выполняем всю работу как обычно, в текущей рабочей папке
+
+#source ./openvpn.cfg
+
+echo -n "Продолжить? (y/n) "
+
+read item
+case "$item" in
+    y|Y) echo "Ввели «y», продолжаем..."
+        ;;
+    n|N) echo "Ввели «n», завершаем..."
+        exit 0
+        ;;
+    *) echo "Ничего не ввели. Выполняем действие по умолчанию..."
+        ;;
+esac
+
+SETCOLOR_SUCCESS="echo -en \\033[1;32m"
+SETCOLOR_FAILURE="echo -en \\033[1;31m"
+SETCOLOR_NORMAL="echo -en \\033[0;39m"
+
+echo -e "Удаляется файл..."
+
+# Команда, которую нужно отследить
+rm test_file
+
+if [ $? -eq 0 ]; then
+    $SETCOLOR_SUCCESS
+    echo -n "$(tput hpa $(tput cols))$(tput cub 6)[OK]"
+    $SETCOLOR_NORMAL
+    echo
+else
+    $SETCOLOR_FAILURE
+    echo -n "$(tput hpa $(tput cols))$(tput cub 6)[fail]"
+    $SETCOLOR_NORMAL
+    echo
+fi
+
+echo "Адрес электронной почты: $EMAIL"
+
+red=$(tput setf 4)
+green=$(tput setf 2)
+reset=$(tput sgr0)
+toend=$(tput hpa $(tput cols))$(tput cub 6)
+
+echo -e "Удаляется файл..."
+
+# Команда, которую нужно отследить
+rm test_file
+
+if [ $? -eq 0 ]; then
+    echo -n "${green}${toend}[OK]"
+else
+    echo -n "${red}${toend}[fail]"
+fi
+echo -n "${reset}"
+echo
+
+
+wget --keep-session-cookies --save-cookies cookies.txt --post-data '__VIEWSTATE=%2FwEPDwUKMTQxOTkwNDIyM2RkZxQf21Pave6N7qqnvqmw0r9lB6I%3D&__EVENTVALIDATION=%2FwEWBAKSurLQCwLcgpeMBwLyveCRDwLvjqbrASLkC9GMYixJ1MsM6vUYI4fh2Grz&user=neon@itprestige.us&password=Prestige310582&enteringButton=%D0%92%D0%BE%D0%B9%D1%82%D0%B8+%3E%3E%3E%3E' https//users.v8.1c.ru/
+
+wget --load-cookies cookies.txt -S -p https://users.v8.1c.ru/distribution/version_file?nick=Platform83&ver=8.3.6.2014&path=Platform\8_3_6_2014\deb.tar.gz

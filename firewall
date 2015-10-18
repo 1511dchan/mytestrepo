@@ -1,0 +1,291 @@
+#!/bin/sh
+
+
+#################################################
+#
+# Локальные параметры фаэрвола 
+#
+#################################################
+
+
+SYSCTL="/sbin/sysctl -w"
+
+# Параметры Iptables
+IPT="/sbin/iptables"
+IPTS="/sbin/iptables-save"
+IPTR="/sbin/iptables-restore"
+
+# Интерфейсы интернета
+INET_IFACE="eth0"
+INET_ADDRESS="95.213.163.218"
+INET_ADDRESS_2="95.213.163.219"
+INET_ADDRESS_3="95.213.163.220"
+INET_ADDRESS_4="95.213.163.221"
+INET_ADDRESS_5="95.213.163.222"
+
+# OpenVPN интерфейсы и сеть
+VPN_IFACE="tun+"
+VPN_IP1="172.16.0.1"
+VPN_NET="172.16.0.0/24"
+
+# Локальные интерфейсы и сети
+#LOCAL_IFACE="eth0"
+#LOCAL_IP="192.168.2.254"
+#LOCAL_NET="192.168.2.0/24"
+#LOCAL_NET_O="192.168.1.0/24"
+#LOCAL_NET_K="192.168.3.0/24"
+#LOCAL_NET_R="192.168.4.0/24"
+VIRT_NET="10.0.0.0/24"
+KVM_NET="10.0.0.0/24"
+SMB_IP="10.0.0.250"
+MX_IP="10.0.0.249"
+MX_BUHU4ET_IP="10.0.0.238"
+MAIL_IP="10.0.0.253"
+#MXRELAY_IP="192.168.2.247"
+WWW_IP="10.0.0.251"
+FTP_IP="10.0.0.252"
+BUH_IP="10.0.0.248"
+WIN_IP="10.0.0.246"
+ASTERISK_IP="10.0.0.247"
+BITRIX24_IP="10.0.0.215"
+
+WIN_CLIENTN75="10.0.0.224"
+WIN_DNOVA="10.0.0.223"
+#OPENERP_IP="10.0.0.248"
+#LOCAL_BCAST="192.168.2.255"
+
+# Интерфейсы локальной петил
+
+LO_IFACE="lo"
+
+LO_IP="127.0.0.1"
+
+
+#################################################
+#
+# Сохранение и восстановление параметров фаэрвола 
+#
+#################################################
+
+if [ "$1" = "save" ]
+then
+        echo -n "Сохраняем правила фаэрвола в файл /etc/iptables.rules ... "
+        $IPTS > /etc/iptables.rules
+        echo "done"
+        exit 0
+elif [ "$1" = "restore" ]
+then
+        echo -n "Востанавливаем правила фаэрвола из файла /etc/iptables.rules ... "
+        $IPTR < /etc/iptables.rules
+        echo "done"
+        exit 0
+fi
+
+###############################################################################
+#
+# Останавливаем Firewall
+#
+##############################################################################
+
+if [ "$1" = "stop" ]
+then
+        echo "Сброс правил фаэрвола ..."
+
+        # Назначаем политики фаэрвола
+        $IPT -P INPUT ACCEPT
+        $IPT -P FORWARD ACCEPT
+        $IPT -P OUTPUT ACCEPT
+        $IPT -t nat -P PREROUTING ACCEPT
+        $IPT -t nat -P POSTROUTING ACCEPT
+        $IPT -t nat -P OUTPUT ACCEPT
+        $IPT -t mangle -P PREROUTING ACCEPT
+        $IPT -t mangle -P OUTPUT ACCEPT
+
+        # Стираем все правила
+        $IPT -F
+        $IPT -t nat -F
+        $IPT -t mangle -F
+
+        # Стираем все правила пользователя
+        $IPT -X
+        $IPT -t nat -X
+        $IPT -t mangle -X
+
+        echo "Правила фаэрвола сброшены ..."
+
+#        echo "Загружаются правила для NAT ..."
+
+#        $IPT -t nat -A POSTROUTING -o $INET_IFACE -s $LOCAL_NET -j SNAT --to-source $INET_ADDRESS
+#       echo "NAT работает!"
+        echo "Правила фаэрвола сброшены. Теперь вы работаете без фэрвола!"
+        exit 0
+fi
+
+
+###############################################################################
+#
+# Сами правила фаэрвола 
+#
+###############################################################################
+
+
+
+# Стираем все правила в таблице NAT
+iptables -t nat --flush
+
+echo "Правила из таблицы NAT стерты ..."
+
+#iptables -A OUTPUT -p tcp -m tcp --dport 22 -j LOG --log-prefix "outgoing SSH: "
+#iptables -t filter -A FORWARD -s $VIRT_NET -j LOG --log-prefix "forwarding ALL: "
+#iptables -t nat -A POSTROUTING -p tcp -m tcp --dport 22 -j LOG --log-prefix "postrouting SSH: "
+#iptables -t mangle -A POSTROUTING -p tcp -m tcp --dport 22 -j LOG --log-prefix "mangle SSH: "
+#iptables -t mangle -A POSTROUTING -p tcp -m tcp --dport 80 -j LOG --log-prefix "mangle WEB: "
+
+# iptables -A OUTPUT -p tcp -m tcp --dport 22 -j DROP
+# iptables -t mangle -A POSTROUTING -p tcp -m tcp --dport 22 -j DROP
+
+#iptables -t filter -A FORWARD -s $VIRT_NET -m tcp -p tcp --dport 22 -j LOG --log-prefix "iptables: "
+
+# Пробрасываем SSH с 22 локального порта на 2222 порт интернет интерфейса
+# [DNAT преобразование адреса получаетля пакета из интернет адреса сервера в локальный адрес сервера]
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 2222 -j DNAT --to-destination $LOCAL_IP:22
+
+# Пробрасываем WWW с 80 порта IP:10.0.0.201 на 80 порт интернет интерфейса
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp  --dport 80 -j DNAT --to-destination $WWW_IP:80
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_3 -p tcp  --dport 80 -j DNAT --to-destination $WWW_IP:80
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_3 -p tcp  --dport 443 -j DNAT --to-destination $WWW_IP:443
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp  --dport 8443 -j DNAT --to-destination $WWW_IP:443
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 443 -j DNAT --to-destination $WWW_IP:443
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp --dport 80 -j DNAT --to-destination $WWW_IP:80
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $INET_ADDRESS -p tcp --dport 80 -j DNAT --to-destination $WWW_IP:80
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp --dport 80 -j DNAT --to-destination $WWW_IP:80
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $INET_ADDRESS -p tcp --dport 80 -j DNAT --to-destination $WWW_IP:80
+
+# Пробрасываем Zimbra порты с IP:10.0.0.200 на порты интернет интерфейса
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 110,143,389,465,993,995,7071,8443 -j DNAT --to-destination $MX_IP
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 25 -j DNAT --to-destination $MAIL_IP:25
+
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_3 -p tcp -m multiport --dport 110,143,389,465,993,995,7071,8443 -j DNAT --to-destination $MX_BUHU4ET_IP
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_3 -p tcp -m multiport --dport 25 -j DNAT --to-destination $MAIL_IP:25
+
+# Пробрасываем Zimbra порты с IP:10.0.0.202 на порты интернет интерфейса
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp  -m multiport --dport 25,110,143,389,443,465,993,995,7071 -j DNAT --to-destination $MAIL_IP
+
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 110,389,443,465,993,995,7071 -j DNAT --to-destination $MX_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 110,389,443,465,993,995,7071 -j DNAT --to-destination $MX_IP
+
+# BITRIX24
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 5222,5223,8890,8891,8893,8894 -j DNAT --to-destination $BITRIX24_IP
+
+# Пробрасываем RELAY порты с IP:192.168.2.247 на порты интернет интерфейса
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 25 -j DNAT --to-destination $MXRELAY_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p tcp --dport 25 -j DNAT --to-destination $MXRELAY_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp --dport 25 -j DNAT --to-destination $MXRELAY_IP
+
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $INET_ADDRESS -p tcp --dport 80 -j DNAT --to-destination 10.0.0.252:80
+
+# Пробрасываем порт DNS с интернет интерфейса на локальный интерфейс по tcp и udp
+# [DNAT преобразование адреса получаетля пакета из интернет адреса сервера в локальный адрес сервера]
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 53 -j DNAT --to-destination $LOCAL_IP:53
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p udp --dport 53 -j DNAT --to-destination $LOCAL_IP:53
+
+# Пробрасываем порты для Asterisk
+# [DNAT преобразование адреса получаетля пакета из интернет адреса сервера в локальный адрес сервера]
+
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p udp -m multiport --dport 10000:10100 -j DNAT --to-destination $ASTERISK_IP
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp -m multiport --dport 10000:10100 -j DNAT --to-destination $ASTERISK_IP
+
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $INET_ADDRESS -p udp -m multiport --dport 5060,10000:20000 -j DNAT --to-destination $ASTERISK_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $INET_ADDRESS -p udp -m multiport --dport 5060,10000:20000 -j DNAT --to-destination $ASTERISK_IP
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp --dport 5555 -j DNAT --to-destination $ASTERISK_IP:5555
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp --dport 443 -j DNAT --to-destination $ASTERISK_IP:5555
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p tcp --dport 9999 -j DNAT --to-destination $ASTERISK_IP:9999
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p udp --dport 9999 -j DNAT --to-destination $ASTERISK_IP:9999
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS_2 -p udp --dport 443 -j DNAT --to-destination $ASTERISK_IP:5555
+
+
+
+#iptables -t nat -A PREROUTING -d $INET_ADDRESS -p tcp -m multiport --dport 49152:49215 -j DNAT --to-destination $WIN_IP
+
+# Пробрасываем порт для Deluge
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 8112 -j DNAT --to-destination $SMB_IP:8112
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp --dport 8112 -j DNAT --to-destination $SMB_IP:8112
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p tcp --dport 8112 -j DNAT --to-destination $SMB_IP:8112
+
+# Пробрасываем SMB с 445 139 порта виртуалки на 445 локальный порт smbz 
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p udp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p udp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $INET_ADDRESS -p udp -m multiport --dport 137,138,139,445 -j DNAT --to-destination $SMB_IP
+
+# Пробрасываем 1C порты с IP:10.0.0.204 на порты локального интерфейса
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p udp -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_ADDRESS -p tcp --dport 475 -j DNAT --to-destination 192.168.2.254
+
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1540,1541,1560:1590 -j DNAT --to-destination $BUH_IP
+
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1560:1591 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1560:1591 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1560:1591 -j DNAT --to-destination $BUH_IP
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1560:1591 -j DNAT --to-destination $BUH_IP
+
+# Пробрасываем FTP порты с IP:10.0.0.201 на порты интернет интерфейса
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp -m multiport --dport 20,21,49152:65534 -j DNAT --to-destination $WWW_IP
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp  -m multiport --dport 20,21,49152:65534 -j DNAT --to-destination $WWW_IP
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp  --dport 2222 -j DNAT --to-destination $WWW_IP:2222
+
+# Пробрасываем RDP порты с IP:WIN_IP на порты интернет интерфейса
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 7777 -j DNAT --to-destination $WIN_IP:3389
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 7778 -j DNAT --to-destination $WIN_CLIENTN75:3389
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 7779 -j DNAT --to-destination $WIN_CLIENTN75:7779
+iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 7780 -j DNAT --to-destination $WIN_DNOVA:3389
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 5900 -j DNAT --to-destination $TRADE_IP:5900
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $VPN_IP1 -p tcp --dport 3389 -j DNAT --to-destination $TRADE_IP:3389
+#iptables -t nat -A PREROUTING -i $VPN_IFACE --destination $VPN_IP1 -p tcp --dport 5900 -j DNAT --to-destination $TRADE_IP:5900
+
+# Пробрасываем OpenERP порты с IP:10.0.0.248 на порты интернет интерфейса
+#iptables -t nat -A PREROUTING -i $INET_IFACE --destination $INET_ADDRESS -p tcp --dport 8069 -j DNAT --to-destination $OPENERP_IP:8069
+
+# Log packets that still don't match
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1540,1541 -j LOG --log-prefix "Принят 1C:  "
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1540,1541 -j LOG --log-prefix "Принят 1C:  "
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p tcp  -m multiport --dport 1560:1591 -j LOG --log-prefix "Принят 1C:  "
+#iptables -t nat -A PREROUTING -i $LOCAL_IFACE --destination $LOCAL_IP -p udp  -m multiport --dport 1560:1591 -j LOG --log-prefix "Принят 1C:  "
+#$IPT -A FORWARD -i $LOCAL_IFACE -o $VPN_IFACE -d $VPN_NET -j LOG --log-prefix "Принят VPN FORWARD: "
+#$IPT -A FORWARD -m limit --limit 3/minute --limit-burst 3 -j LOG --log-prefix "Убит FORWARD: "
+###############################################################################
+#
+# POSTROUTING chain
+#
+###############################################################################
+
+# Включаем NAT на фаэрволе
+#iptables -t nat -A POSTROUTING -s $LOCAL_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS
+iptables -t nat -A POSTROUTING -s $VIRT_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS
+iptables -t nat -A POSTROUTING -s $VIRT_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS_2
+iptables -t nat -A POSTROUTING -s $VIRT_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS_3
+iptables -t nat -A POSTROUTING -s $VIRT_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS_4
+iptables -t nat -A POSTROUTING -s $VIRT_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS_5
+
+#iptables -t nat -A POSTROUTING -s $KVM_NET -o $INET_IFACE -j SNAT --to-source $INET_ADDRESS
+
+echo "NAT запущен ..."
+
+###############################################################################
+#
+# mangle table
+#
+###############################################################################
+
+#Рассчитывает правильный MSS для соединения
+iptables -A OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+iptables -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+
+echo "Правила из таблицы mangle загружены ..."

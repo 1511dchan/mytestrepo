@@ -1,0 +1,92 @@
+#!/bin/sh
+if [ -z $1 ] || [ -z $2 ]; then
+   echo "ПАРАМЕТРЫ СКРИПТА НЕ ЗАДАНЫ!"
+   echo "Первый аргумент отвечает за тип операции и принимает значения: backup | restore"
+   echo "Второй аргумент отвечает за полное имя сервера 1С: например 1c.cln где "1c" - сокрашенное имя, а "cln" - суффикс сервера"
+   echo "Значение первого параметра restore требует ввода третьего и четвертого параметра:"
+   echo "Третий параметр - название сервера в который делается восстановление из архива"
+   echo "Четвертый параметр DATA - это значение даты архива из которого будет вестись восстановление, имеет вид: дд.мм.гг"
+   echo "Введите параметры скрипта. Без параметров скрипт не выполняется!"
+
+elif [ "$1" != "backup" ] && [ "$1" != "restore" ]; then
+   echo "НЕ ВЕРНОЕ ЗНАЧЕНИЕ ПЕРВОГО ПАРАМЕТРА!"
+   echo "Первый аргумент отвечает за тип операции и принимает значения: backup | restore"
+
+elif [ "$1" = "restore" ] && [ -z "$2" ] && [ -z "$3" ] && [ -z "$4" ]; then
+   echo "НЕ ЗАДАНЫ ЗНАЧЕНИЯ ПАРАМЕТРОВ СКРИПТА ДЛЯ ВОССТАНОВЛЕНИЯ ИЗ АРХИВА!"
+   echo "Значение первого параметра restore требует ввода третьего и четвертого параметра:"
+   echo "не задано значение второго параметра - название сервера с которого делался архив"
+   echo "не задано значение третьего параметра - название сервера в который делается восстановление из архива"
+   echo "не заданно значение четвертого параметра - дата архива из которого будет вестись восстановление, имеет вид: дд.мм.гг"
+
+elif [ "$1" = "restore" ] && [ -z "$3" ] && [ -z "$4" ]; then
+   echo "НЕ ЗАДАНЫ ЗНАЧЕНИЯ ПАРАМЕТРОВ СКРИПТА ДЛЯ ВОССТАНОВЛЕНИЯ ИЗ АРХИВА!"
+   echo "Значение первого параметра restore требует ввода третьего и четвертого параметра:"
+   echo "не задано значение третьего параметра - название сервера в который делается восстановление из архива"
+   echo "не заданно значение четвертого параметра - дата архива из которого будет вестись восстановление, имеет вид: дд.мм.гг"
+
+elif [ "$1" = "restore" ] && [ -z "$4" ]; then
+   echo "НЕ ЗАДАНО ЗНАЧЕНИЕ ДАТЫ АРХИВА ДЛЯ ВОССТАНОВЛЕНИЯ!"
+   echo "Значение первого параметра restore требует ввода четвертого параметра:"
+   echo "Четвертый параметр DATA - это значение даты архива из которого будет вестись восстановление, имеет вид: дд.мм.гг"
+
+################################################################
+#
+# Резервное копирование сервера баз данных Postgres
+#
+################################################################
+
+elif [ "$1" = "backup" ] && [ ! -z "$2" ]; then
+   #apt-get install postgresql-client-9.1 postgresql-client-common -y
+   DATE=`/bin/date '+%d.%m.%Y'`
+   SERVER=$2
+
+   mkdir /backup/pgsql/$SERVER-$DATE
+   touch /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   touch /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+
+   psql -h $SERVER -U postgres -t -A -q -c "select datname from pg_database" > /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/template0/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/template1/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/postgres/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+
+   cat /backup/pgsql/$SERVER-$DATE/$SERVER.list | while read BASE
+   do
+      BASEPATH=$(echo $BASE | sed 's/ /-/g')
+      echo `date +"%T %d.%m.%Y"`." - Архивируем базу" $BASE "на сервере - "$SERVER >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+      pg_dump -h $SERVER -U postgres -Ft -w "$BASE" > /backup/pgsql/$SERVER-$DATE/"$BASEPATH".dump
+      echo `date +"%T %d.%m.%Y"`." - Архивирование базы [ЗАВЕРШЕНО]" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   done
+
+   echo "удаляем архивы, которым уже больше 15 дней" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   /usr/bin/find /backup/pgsql/ -type d -mtime +15 -print >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   /usr/bin/find /backup/pgsql/ -type d -mtime +15 -exec rm -r {} \; >/dev/null 2>&1
+   echo `date +"%T %d.%m.%Y"`." - Процесс архивирования [ЗАВЕРШЕН]" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   exit 0
+
+#####################################################################
+#
+# Восстановление сервера баз данных Postgres из резервной копии
+#
+#####################################################################
+
+elif [ "$1" = "restore" ] && [ ! -z "$2" ] && [ ! -z $3 ] && [ ! -z $4 ]; then
+   #apt-get install postgresql-client-9.1 postgresql-client-common -y
+   SRV_ARHIV=$2
+   SRV_RESTORE=$3
+   DATE=$4
+
+   touch /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_ARHIV-restore.log
+
+   cat /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_ARHIV.list | while read BASE
+   do
+      BASEPATH=$(echo $BASE | sed 's/ /-/g')
+      echo $BASE - $DATE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      echo "Удаление базы" $BASE "с сервера - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      dropdb -h $SRV_RESTORE -U postgres -w "$BASE"
+      echo "Создаем базу" $BASE "на сервере - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      createdb -h $SRV_RESTORE -U postgres -w "$BASE"
+      echo "Восстановить базу" $BASE "на сервере - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      pg_restore -h $SRV_RESTORE -U postgres -w -d "$BASE" /backup/pgsql/$SRV_ARHIV-$DATE/"$BASEPATH".dump
+   done
+fi

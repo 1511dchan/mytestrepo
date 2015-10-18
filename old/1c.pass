@@ -1,0 +1,45 @@
+#!/bin/sh
+
+#################################################
+#
+# Клонирование сервера 1С 
+#
+#################################################
+
+if [ "$1" = "pass" ]
+then
+
+        echo "Демонтируем подключенные диски виртуальных машин 1c и 2c"
+        umount /dev/vg0/2c
+        umount /dev/vg0/1c
+
+        echo "Остановка виртуальной машины"
+        lxc-stop -n 2c
+
+        echo "удаляем старую виртуальную машину 2c"
+        lxc-destroy -n 2c
+        lvremove vg0/2c
+
+        # клонируем сервер и создаем lvm раздел
+        lxc-clone -s -o 1c -n 2c lvm -v vg0 -L 200G
+        mount /dev/vg0/2c /mnt/
+
+        echo "Правим конфигурационные файлы виртуальной машины 2c"
+        sed -i "/address/s/192.168.8.220/192.168.8.221/g" /mnt/etc/network/interfaces
+        echo "127.0.0.1       localhost
+127.0.1.1       2c
+
+192.168.8.221   2c.cln  2c" > /mnt/etc/hosts
+        sed -i 's/"1C"/"2c"/g' /mnt/home/usr1cv82/.1cv82/1C/1Cv82/srvribrg.lst
+        sed -i 's/"1C"/"2c"/g;s/"PostgreSQL","1c"/"PostgreSQL","2c"/g;s/Srvr=1c/Srvr=2c/g' /mnt/home/usr1cv82/.1cv82/1C/1Cv82/reg_1541/1CV8Reg.lst
+
+        echo "Демонтаж жесткого диска виртуальной машины 2c"
+        umount /dev/vg0/2c
+        echo "Запуск виртуальной машины"
+        lxc-start -n 2c -d
+
+sed -i 's/"postgres","............................................"/"postgres","21DA7RzKcZ\/mCq4D1QlAQgr7xRf40AClHQYS+RfGBJ8="/g' /home/usr1cv82/.1cv82/1C/1Cv82/reg_1541/1CV8Reg.lst
+
+fi
+
+sed -i 's/"postgres","............................................"/"postgres","21DA7RzKcZ\/mCq4D1QlAQgr7xRf40AClHQYS+RfGBJ8="/g' /home/usr1cv82/.1cv82/1C/1Cv82/reg_1541/1CV8Reg.lst

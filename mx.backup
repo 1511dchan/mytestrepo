@@ -1,0 +1,23 @@
+#!/bin/bash
+a1=/root/script/myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#ls -lh /opt/zimbra/backup/mailbox/2015/02/24/ | awk '{print $9}' | grep -v '^$' | sed '/admin/d; /galsync/d; /ham./d; /spam./d; /virus-/d' | while read account
+#lxc-attach -n mx -- su - zimbra -c "zmprov -lgaa" | sed '/galsync/d; /ham./d; /spam./d; /virus-/d' | while read account
+#do
+#echo $account"          OK"
+#su - zimbra -c 'zmprov ca '$account' 1234567890'
+#/opt/zimbra/bin/zmmailbox -z -m $account -t 0 postRestURL "//?fmt=tgz&resolve=reset" "/opt/zimbra/backup/mailbox/2015/02/24/"$account"/full.tgz"
+#done
+
+#mkdir /tmp/postfix
+#mount /dev/vg0/postfix /tmp/postfix
+
+#:> /tmp/postfix/etc/postfix/mydom_real_rec
+
+#umount /tmp/postfix
+#rm -r /tmp/postfix
+#rm /tmp/test
+
+mxAccountsTmp lxc mx-buhu4et
+mxAccountsTmp lxc mx
+mxAccountsSave lxc postfix

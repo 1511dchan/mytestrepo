@@ -1,0 +1,984 @@
+#!/bin/bash
+
+lxcInstall(){
+apt-get update
+apt-get -y upgrade
+apt-get install lxc bridge-utils -y
+apt-get -y install language-pack-en language-pack-ru wget
+
+locale-gen en_US ru_RU ru_RU.UTF-8
+export LANG="ru_RU.UTF-8"
+echo LANG="ru_RU.UTF-8" > /etc/default/locale
+#sudo dpkg-reconfigure console-setup
+}
+
+# Функция создает контейнеры lxc
+lxcCreate(){
+
+# Пример использования данной функции:
+# lxcCreate test 100G precise x32
+
+name=$1                                                         # Имя контейнера
+size=$2                                                         # Размер контейнера
+params=""                                                       # Параметры контейнера - релиз и разрядность ОС
+vg_name=`vgdisplay | grep VG\ Name | awk '{ print $3 }'`        # Узнаем название LVM групп
+lxc="lxc-attach -n "$1" --"                                     # Команда дла подключения к контейнеру
+
+case $3 in
+     precise)
+        case $4 in
+            x32)
+                params="-- -r "$3" -a i386"
+                ;;
+            x64)
+                params="-- -r "$3" -a amd64"
+                ;;
+            *)
+                params=""
+                ;;
+        esac
+        ;;
+     x32)
+        params="-- -a i386"
+        ;;
+     x64)
+        params="-- -a amd64"
+        ;;
+     *)
+        params=""
+        ;;
+esac
+
+lxc-create -n $name -t ubuntu -B lvm --vgname $vg_name --fstype ext4 --fssize $size $params
+
+
+lxc-start -n $name -d
+sleep 10
+$lxc apt-get update && apt-get upgrade -y
+$lxc echo -e '!A@S#D$F%G^H&J*K(L):\n!A@S#D$F%G^H&J*K(L):\n' | passwd ubuntu
+
+$lxc sed -i 's/ubuntu/neon/g' /etc/passwd
+$lxc sed -i 's/ubuntu/neon/g' /etc/group
+$lxc sed -i 's/ubuntu/neon/g' /etc/shadow
+
+$lxc mv /home/ubuntu/ /home/neon
+
+$lxc apt-get -y install language-pack-ru wget
+#$lxc locale-gen en_US ru_RU ru_RU.UTF-8
+$lxc locale-gen ru_RU.UTF-8
+$lxc dpkg-reconfigure locales
+#$lxc sh -c 'echo LANG=\"ru_RU.UTF-8\" > /etc/default/locale'
+#$lxc sudo dpkg-reconfigure console-setup
+$lxc reboot
+sleep 30
+}
+
+#####################################################################
+#
+# Функция настраивает сеть в контейнере
+#
+#####################################################################
+lxcNetwork(){
+# Примеры запуска функции:
+
+# lxcNetwork 1c.ss.cln.su lxc 1c
+#  lxc - параметр говорит что ставим в контейнер
+#  1с.ss.cln.su - полное имя хоста имя контейнера вычисляется автоматически
+
+#host=`echo $1 | cut -f 1 -d . -s`
+ip=`host $1 | cut -f 4 -d ' '`
+gw=`host $1 | cut -f 4 -d ' ' | cut -f 1-3 -d . -s`".254"
+dns=`echo $1 | cut -f 2-4 -d . -s`
+
+if [ $2 = "lxc" ]; then
+        lxc="lxc-attach -n "$3" --"
+else
+        lxc=''
+fi
+
+$lxc sh -c 'echo "auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+        address 	'$ip'
+        netmask 	255.255.255.0
+        gateway 	'$gw'
+        dns-nameservers '$gw'
+        dns-search      '$dns'
+        dns-domain      '$dns'" > /etc/network/interfaces'
+
+$lxc sh -c 'ifdown eth0 && ifup eth0'
+}
+
+#####################################################################
+#
+# Функция настраивает файл /etc/hosts как в контейнере так и в реальной машине
+#
+#####################################################################
+lxcHosts(){
+# Примеры запуска функции:
+
+# lxcHosts 1c.ss.cln.su lxc 1c
+#  lxc - параметр говорит что ставим в контейнер
+#  1с.ss.cln.su - полное имя хоста имя контейнера вычисляется автоматически
+
+if [[ "lxc" = $2 ]]; then
+        lxc="lxc-attach -n "$3" --"
+else
+        lxc=''
+fi
+
+echo $lxc
+
+if [[ "localhost" = $1 ]]; then
+        $lxc sh -c 'echo "127.0.0.1     localhost" > /etc/hosts'
+elif [[ "" = `$lxc grep $1 /etc/hosts` ]]; then
+        host=`echo $1 | cut -f 1 -d . -s`
+        ip=`host $1 | cut -f 4 -d ' '`
+        $lxc sh -c 'echo "'$ip'   '$1'    '$host'" >> /etc/hosts'
+fi
+
+}
+
+#Функция делает образ контейнера
+lxcClone(){
+# Примеры запуска функции:
+# lxcClone 1c - создает образ жесткого диска контейнера /backup/1с.iso
+
+lv_name=`lvdisplay | grep "LV Path" | grep $1 | awk '{ print $3 }' `
+lv_snapshot=$lv_name"_snapshot"
+lv_backup="/backup/"$1".iso"
+lv_size=`lvdisplay $lv_name | grep "Current LE" | awk '{ print $3 }'`
+
+lvcreate -l $lv_size -s $lv_name -n $lv_snapshot
+#dd if=$lv_snapshot of=$lv_backup
+pv -tpreb $lv_snapshot | dd of=$lv_backup
+#scp -r -P22222 $lv_backup neon@95.213.163.218:/backup
+#dd if=/backup/www.iso of=/dev/vg0/www
+lvremove -f $lv_snapshot
+}
+
+
+#####################################################################
+#
+# Функция устанавливает сервер базы данных Postgres
+#
+#####################################################################
+
+pgsqlInstall(){
+# Примеры запуска функции:
+
+# pgsqlInstall 9.2.4 PrestigePostgres lxc 1c
+#  9.2.4 - полный номер версии севера
+#  PrestigePostgres - пароль сервера баз данных
+#  lxc - параметр говорит что ставим в контейнер
+#  1с - имя контейнера
+
+ver=`echo $1 | cut -f 1-2 -d . -s` # - версия сервера короткий номер 9.2
+rel=$1 # - релиз сервера полный номер 9.2.4
+pass=$2 # - пароль сервера
+
+if [[ "lxc" = $3 ]]; then
+        lxc="lxc-attach -n "$4" --"
+        if [[ $(lxc-attach -n "$4" -- uname -m) = "i686" ]]; then
+                archdir="x32"
+                arch="i386"
+        elif [[ $(lxc-attach -n "$4" -- uname -m) = "x86_64" ]]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+else
+        lxc=''
+        if [[ $(uname -m) = "i686" ]]; then
+                archdir="x32"
+                arch="i386"
+        elif [[ $(uname -m) = "x86_64" ]]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+fi
+
+release=`$lxc lsb_release -c | cut -f 2`
+kernel=`$lxc grep 'kernel.shmmax=1073741824' /etc/sysctl.conf`
+apt=`$lxc grep 'deb http://security.ubuntu.com/ubuntu precise-security main' /etc/apt/sources.list`
+
+#Добавить в конец файла /etc/sysctl.conf строку kernel.shmmax=1073741824
+if [[ "" = $kernel ]]; then
+        $lxc sh -c 'echo "kernel.shmmax=1073741824" >> /etc/sysctl.conf'
+fi
+
+$lxc sysctl -p
+
+$lxc rm -r /tmp/pgsql/
+$lxc mkdir /tmp/pgsql
+
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/libpq5_"$rel"-1.1C_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/postgresql-"$ver"_"$rel"-1.1C_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/postgresql-client-"$ver"_"$rel"-1.1C_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/postgresql-client-common_154.1.1C_all.deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/postgresql-common_154.1.1C_all.deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch".deb
+
+if [[ $release = "trusty" ]] ; then
+        if [[ "" = $apt ]]; then
+                $lxc sh -c 'echo "deb http://security.ubuntu.com/ubuntu precise-security main" >> /etc/apt/sources.list'
+        fi
+        $lxc apt-get update
+        $lxc apt-get install -y libldap-2.4-2 libgssapi3-heimdal libasn1-8-heimdal libhcrypto4-heimdal libheimntlm0-heimdal libkrb5-26-heimdal libroken18-heimdal libsasl2-2 ssl-cert libheimbase1-heimdal libhx509-5-heimdal libwind0-heimdal libsasl2-modules-db libsasl2-modules libc6 libgcc1 libossp-uuid16 libssl1.0.0 libstdc++6 libxml2 libxslt1.1 zlib1g libicu-dev libicu48
+
+        $lxc dpkg -i /tmp/pgsql/libpq5_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-client-common_154.1.1C_all.deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-client-"$ver"_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-common_154.1.1C_all.deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-"$ver"_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch".deb
+
+elif [[ $release = "precise" ]] ; then
+        $lxc dpkg-deb -x /tmp/pgsql/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch".deb /tmp/pgsql/tmpdir
+        $lxc dpkg-deb -e /tmp/pgsql/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch".deb /tmp/pgsql/tmpdir/DEBIAN
+        $lxc sed -i '/Depends/s/libicu4[0-9]/libicu48/g' /tmp/pgsql/tmpdir/DEBIAN/control
+        $lxc apt-get -y install libc6 libgcc1 libossp-uuid16 libssl1.0.0 libstdc++6 libxml2 libxslt1.1 zlib1g libicu-dev libicu48
+        $lxc dpkg -b /tmp/pgsql/tmpdir /tmp/pgsql/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch"_fix.deb
+        $lxc dpkg -i /tmp/pgsql/libpq5_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-client-common_154.1.1C_all.deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-client-"$ver"_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-common_154.1.1C_all.deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-"$ver"_"$rel"-1.1C_"$arch".deb
+        $lxc dpkg -i /tmp/pgsql/postgresql-contrib-"$ver"_"$rel"-1.1C_"$arch"_fix.deb
+fi
+
+$lxc apt-get -f -y install
+
+$lxc sed -i '/local/s/peer/trust/g' /etc/postgresql/"$ver"/main/pg_hba.conf
+
+ip=`$lxc cat /etc/network/interfaces | grep address | awk '{print $2}' | cut -f 1-3 -d . -s`
+
+$lxc sed -i '/host/s/127.0.0.1\/32/'$ip'.0\/24/g' /etc/postgresql/"$ver"/main/pg_hba.conf
+$lxc sed -i 's/#listen_addresses/listen_addresses/g' /etc/postgresql/"$ver"/main/postgresql.conf
+$lxc sed -i '/listen_addresses/s/localhost/*/g' /etc/postgresql/"$ver"/main/postgresql.conf
+
+$lxc service postgresql restart
+
+$lxc psql -U postgres -c "alter user postgres with password '$pass';"
+
+$lxc sed -i '/local/s/trust/peer/g' /etc/postgresql/"$ver"/main/pg_hba.conf
+$lxc service postgresql restart
+}
+
+# Функция удаляет Postgres
+pgsqlUninstall()
+{
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+release=`$lxc dpkg -l | grep postgresql-9 | awk '{ print $2 }' | cut -d - -f2`
+
+echo $release
+
+$lxc dpkg -l | grep postgre
+$lxc dpkg -r postgresql-contrib-$release
+$lxc dpkg -r postgresql-$release
+$lxc dpkg -r postgresql-common
+$lxc dpkg -r postgresql-client-$release
+$lxc dpkg -r postgresql-client-common
+
+$lxc dpkg -P postgresql-client-common
+$lxc dpkg -P postgresql-common
+$lxc dpkg -P postgresql-$release
+$lxc dpkg -l | grep postgre
+}
+
+# Функция реиндексирует базы Postgres
+pgsqlReindex()
+{
+
+SERVER=$1
+DATE=`/bin/date '+%d.%m.%Y'`
+
+
+touch /backup/pgsql/$SERVER-$DATE/reindex.log
+:> /backup/pgsql/$SERVER-$DATE/reindex.log
+
+   cat /backup/pgsql/$SERVER-$DATE/reindex.list | while read BASE
+   do
+      BASEPATH=$(echo $BASE | sed 's/ /-/g')
+      echo `date +"%T %d.%m.%Y"`." - Реиндексируем базу" $BASE "на сервере - "$SERVER >> /backup/pgsql/$SERVER-$DATE/reindex.log
+      psql -U postgres -h $SERVER --dbname $BASE -w -c "reindex DATABASE \"$BASE\";" >> /backup/pgsql/$SERVER-$DATE/reindex.log
+      echo `date +"%T %d.%m.%Y"`." - Реиндексация базы" $BASE "[ЗАВЕРШЕНО]" >> /backup/pgsql/$SERVER-$DATE/reindex.log
+      echo `date +"%T %d.%m.%Y"`." - Запускаем Autovacuum в базе" $BASE "на сервере - "$SERVER >> /backup/pgsql/$SERVER-$DATE/reindex.log
+      psql -U postgres -h $SERVER --dbname $BASE -w -c "vacuum full analyze;" >> /backup/pgsql/$SERVER-$DATE/reindex.log
+      echo `date +"%T %d.%m.%Y"`." - Autovacuum базы" $BASE "[ЗАВЕРШЕНО]" >> /backup/pgsql/$SERVER-$DATE/reindex.log
+   done
+}
+
+# Функция устанавливает 1c
+f1cInstall()
+{
+
+rel=`echo $1 | cut -f 1-3 -d . -s`
+sborka=`echo $1 | cut -f 4 -d . -s`
+
+if [ $2 = "lxc" ]; then
+        lxc="lxc-attach -n "$3" --"
+        if [ $(lxc-attach -n "$3" -- uname -m) = "i686" ]; then
+                archdir="x32"
+                arch="i386"
+        elif [ $(lxc-attach -n "$3" -- uname -m) = "x86_64" ]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+else
+        lxc=''
+        if [ $(uname -m) = "i686" ]; then
+                archdir="x32"
+                arch="i386"
+        elif [ $(uname -m) = "x86_64" ]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+fi
+
+$lxc apt-get install libxml2 ssl-cert unixodbc imagemagick ttf-mscorefonts-installer openssl t1utils -y
+
+$lxc ln -s `find /usr/lib/ -name libMagickWand.so.[1-9]` `find /usr/lib/ -name libMagickWand.so.[1-9] | cut -f 1-2 -d . -s`
+
+$lxc rm -r /tmp/1c
+$lxc mkdir /tmp/1c
+
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-common_"$rel"-"$sborka"_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-server_"$rel"-"$sborka"_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-ws_"$rel"-"$sborka"_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-common-nls_"$rel"-"$sborka"_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-server-nls_"$rel"-"$sborka"_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-ws-nls_"$rel"-"$sborka"_"$arch".deb
+
+$lxc dpkg -i /tmp/1c/1c-enterprise83-common_"$rel"-"$sborka"_"$arch".deb
+$lxc dpkg -i /tmp/1c/1c-enterprise83-server_"$rel"-"$sborka"_"$arch".deb
+$lxc dpkg -i /tmp/1c/1c-enterprise83-ws_"$rel"-"$sborka"_"$arch".deb
+$lxc dpkg -i /tmp/1c/1c-enterprise83-common-nls_"$rel"-"$sborka"_"$arch".deb
+$lxc dpkg -i /tmp/1c/1c-enterprise83-server-nls_"$rel"-"$sborka"_"$arch".deb
+$lxc dpkg -i /tmp/1c/1c-enterprise83-ws-nls_"$rel"-"$sborka"_"$arch".deb
+
+$lxc chown -R usr1cv8:grp1cv8 /opt/1C
+
+$lxc service srv1cv83 restart
+
+$lxc netstat -atn |grep 0.0.0.0:15
+$lxc ps aux|grep 1c
+
+$lxc service apache2 restart
+
+}
+
+# Функция устанавливает WEB-сервер Apache версии 2.2 для 1С, так как 1С не поддерживает Apache 2.4
+f1cwwwInstall(){
+# Пример использования данной функции:
+# f1cwwwInstall lxc conteiner_name
+# f1cwwwInstall - без параметров. установит Apache2.2 в текушей машине.
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+release=`$lxc lsb_release -c | cut -f 2`
+echo $release
+
+if [[ "$release" = "trusty" ]] ; then
+
+        $lxc sh -c 'echo deb http://ru.archive.ubuntu.com/ubuntu/ precise main > /etc/apt/sources.list.d/ubuntu1204.list'
+        $lxc apt-get update
+        $lxc apt-get install apache2=2.2.22-1ubuntu1 apache2-mpm-worker=2.2.22-1ubuntu1 apache2.2-common=2.2.22-1ubuntu1 apache2.2-bin=2.2.22-1ubuntu1 -y
+
+elif [[ "$release" = "precise" ]] ; then
+        $lxc apt-get install apache2 -y
+fi
+
+}
+
+# Функция лечит от жадности 1С
+f1cCrack(){
+# Пример использования данной функции:
+# f1cCrack lxc conteiner_name
+# f1cCrack - без параметров. будет вылечена от жадности 1С в текущей машине.
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+$lxc wget --no-check-certificate -P /tmp itprestige.us/download/1c/patch/1c8_uni2patch_lin
+$lxc chmod 750 /tmp/1c8_uni2patch_lin
+$lxc /tmp/1c8_uni2patch_lin /opt/1C/v8.3/i386/backbas.so
+}
+
+# Функция публикует базу в качестве веб-сервиса на сервере 1с
+f1cwww()
+{
+# Пример использования данной функции:
+# f1cwww conteiner_name 1c base x32
+
+name=$1       # Имя контейнера
+server=$2     # Имя сервера на котором работает 1С
+base=$3       # Имя публикуемой базы
+arch="i386"   # Архитектура контейнера
+
+case $4 in
+     x32)
+        arch="i386"
+        ;;
+     x64)
+        arch="x86_64"
+        ;;
+     *)
+        arch="i386"
+        ;;
+esac
+
+lxc-attach -n $name -- mkdir /var/www/$base
+lxc-attach -n $name -- /opt/1C/v8.3/$arch/webinst -apache22 -wsdir $base -dir '/var/www/'"$base"'' -connStr 'Srvr='"$server"';Ref='"$base"';' -confPath /etc/apache2/httpd.conf
+lxc-attach -n $name -- chown -R www-data:www-data /var/www/$base
+lxc-attach -n $name -- service apache2 restart
+}
+
+# Функция устанавливает 1с на клиенте
+f1cClient()
+{
+#lxc-attach -n $1 -- ln -s /usr/lib/x86_64-linux-gnu/libMagickWand.so.5 /usr/lib/x86_64-linux-gnu/libMagickWand.so
+rm -r /tmp/1c
+mkdir /tmp/1c
+
+if [ $(uname -m) = "i686" ]; then
+archdir="x32"
+arch="i386"
+elif [ $(uname -m) = "x86_64" ]; then
+archdir="x64"
+arch="amd64"
+fi
+
+rel=$1
+sborka=$2
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-common_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-server_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-ws_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-common-nls_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-server-nls_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-ws-nls_"$rel"-"$sborka"_"$arch".deb
+
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-client_"$rel"-"$sborka"_"$arch".deb
+wget -P /tmp/1c http://itprestige.us/download/1c/"$rel"."$sborka"/$archdir/1c-enterprise83-client-nls_"$rel"-"$sborka"_"$arch".deb
+
+dpkg -i /tmp/1c/1c-enterprise83-common_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-server_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-ws_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-common-nls_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-server-nls_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-ws-nls_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-client_"$rel"-"$sborka"_"$arch".deb
+dpkg -i /tmp/1c/1c-enterprise83-client-nls_"$rel"-"$sborka"_"$arch".deb
+}
+
+# Функция удаляет клиент 1С
+f1cCUninstall()
+{
+service srv1cv83 stop
+
+dpkg -l | grep 1c-enterprise
+
+dpkg -r 1c-enterprise83-client-nls
+dpkg -r 1c-enterprise83-client
+dpkg -r 1c-enterprise83-crs
+dpkg -r 1c-enterprise83-ws-nls
+dpkg -r 1c-enterprise83-ws
+dpkg -r 1c-enterprise83-server-nls
+dpkg -r 1c-enterprise83-server
+dpkg -r 1c-enterprise83-common-nls
+dpkg -r 1c-enterprise83-common
+
+dpkg -P 1c-enterprise83-ws 1c-enterprise83-server
+
+dpkg -l | grep 1c-enterprise
+}
+
+# Функция удаляет сервер 1С и клиент 1С
+f1cUninstall()
+{
+# Пример использования данной функции:
+# f1cUninstall lxc conteiner_name
+# f1cUninstall - без параметров. будет удалена 1С в текущей машине.
+# f1cUninstall - без параметров, так же удалит 1С Клиента в текущей машине
+
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+$lxc service srv1cv83 stop
+$lxc dpkg -l | grep 1c-enterprise
+$lxc dpkg -r 1c-enterprise83-client-nls 1c-enterprise83-client 1c-enterprise83-crs 1c-enterprise83-ws-nls 1c-enterprise83-ws 1c-enterprise83-server-nls 1c-enterprise83-server 1c-enterprise83-common-nls 1c-enterprise83-common
+$lxc dpkg -P 1c-enterprise83-ws 1c-enterprise83-server
+$lxc dpkg -l | grep 1c-enterprise
+}
+
+# Функция устанавливает OpenVPN сервер
+openvpnInstall()
+{
+#service openvpn restart
+#rm -r /etc/openvpn/*
+
+apt-get update && apt-get install openvpn easy-rsa -y
+cd /etc/openvpn
+mkdir ccd srvkey genkey
+mkdir /etc/openvpn/srvkey/srv
+mkdir /etc/openvpn/srvkey/cln
+rm -r /etc/openvpn/genkey/*
+rm -r /etc/openvpn/srvkey/srv/*
+
+cp -r /usr/share/easy-rsa/* /etc/openvpn/genkey/
+cd /etc/openvpn/genkey
+sed -i 's/$EASY_RSA\/keys/\/etc\/openvpn\/srvkey\/srv/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_SIZE=/s/1024/'$2'/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_COUNTRY=/s/US/RU/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_PROVINCE=/s/CA/MO/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_CITY=/s/SanFrancisco/Moscow/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_ORG=/s/Fort-Funston/Buhu4et/g' /etc/openvpn/genkey/vars
+#sed -i '/KEY_EMAIL=/s/me@myhost.mydomain/neon@itprestige.us/g' /etc/openvpn/genkey/vars
+sed -i '/KEY_OU=/s/MyOrganizationalUnit/IT/g' /etc/openvpn/genkey/vars
+
+. ./vars
+./clean-all
+./build-ca
+./build-key-server $1
+./build-dh
+./build-key-pkcs12 director
+./build-key-pkcs12 admin
+./build-key-pkcs12 buhg
+./build-key-pkcs12 manager
+./build-key-pkcs12 client
+./build-key-pkcs12 guest
+openvpn --genkey --secret /etc/openvpn/srvkey/srv/ta.key
+
+cd /etc/openvpn
+
+touch /etc/openvpn/server.conf
+
+echo "local $1
+port 443
+proto tcp
+#port-share 10.0.0.251 443
+dev tun
+tls-server
+server 172.16.0.0 255.255.255.0
+keepalive 10 120
+comp-lzo
+persist-key
+persist-tun
+status openvpn-status.log
+user nobody
+group nogroup
+chroot /etc/openvpn
+cipher BF-CBC
+ca /etc/openvpn/srvkey/ca.crt
+cert /etc/openvpn/srvkey/srv/"$1".crt
+key /etc/openvpn/srvkey/srv/"$1".key
+dh /etc/openvpn/srvkey/srv/dh"$2".pem
+tls-auth /etc/openvpn/srvkey/srv/ta.key 0
+username-as-common-name
+plugin /usr/lib/openvpn/openvpn-plugin-auth-pam.so login
+log /var/log/openvpn.log
+verb 0
+client-config-dir ccd
+client-to-client
+route 10.2.3.0 255.255.255.0
+route 10.2.2.0 255.255.255.0
+ifconfig-pool-persist ipp.txt" > /etc/openvpn/server.conf
+
+
+mkdir /etc/openvpn/tmp
+chmod -R 777 /etc/openvpn/tmp
+
+service openvpn restart
+}
+
+openvpnGen(){
+cd /etc/openvpn/genkey
+. ./vars
+./build-key-pkcs12 $1
+}
+
+lxcBackup(){
+# Принимает одно значение - имя LXC контейнера
+# заносим в переменную DATE текущую дату
+DATE=`/bin/date '+%d.%m.%Y'`
+SERVER=$1
+VGNAME=`vgdisplay | grep "VG Name" | awk '{print $3}'`
+mount /dev/mapper/$VGNAME-$SERVER /mnt
+mkdir /backup/$SERVER
+mkdir /backup/$SERVER/$SERVER-$DATE
+touch /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+echo `date +"%T %d.%m.%Y"`." - Процесс архивирования в файл "$SERVER"-"$DATE".tar.gz [ЗАПУЩЕН]" > /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+tar -cvzf /backup/$SERVER/$SERVER-$DATE/$SERVER-$DATE.tar.gz /mnt/ >> /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+echo "удаляем архивы, которым уже больше 2 дней" >> /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+/usr/bin/find /backup/$SERVER/ -type d -mtime +2 -print >> /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+/usr/bin/find /backup/$SERVER/ -type d -mtime +2 -exec rm -r {} \; >/dev/null 2>&1
+umount /dev/mapper/$VGNAME-$SERVER
+echo `date +"%T %d.%m.%Y"`." - Архивирование контейнера [ЗАВЕРШЕНО]" >> /backup/$SERVER/$SERVER-$DATE/$SERVER-backup.log
+}
+
+#######################################################################################
+#
+# Установка необходимых пакетов для резервного копирования сервера баз данных Postgres
+#
+#######################################################################################
+
+# Фунуция подготовки к резервному копированию сервера баз данных.
+pgsqlBackupPrepare(){
+# Функция запускается без значений. Либо указывается значение контейнера который отвечает
+# за резервное копирование, но эта возможность пока не тестировалась.
+
+# Примеры запуска функции:
+
+# pgsqlBackupPrepare
+#  9.2.4 - полный номер версии севера
+#  lxc - параметр говорит что ставим в контейнер
+#  1с - имя контейнера
+
+ver=`echo $1 | cut -f 1-2 -d . -s` # - версия сервера короткий номер 9.2
+rel=$1 # - релиз сервера полный номер 9.2.4
+
+if [ $3 = "lxc" ]; then
+        lxc="lxc-attach -n "$4" --"
+        if [ $(lxc-attach -n "$4" -- uname -m) = "i686" ]; then
+                archdir="x32"
+                arch="i386"
+        elif [ $(lxc-attach -n "$4" -- uname -m) = "x86_64" ]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+else
+        lxc=''
+        if [ $(uname -m) = "i686" ]; then
+                archdir="x32"
+                arch="i386"
+        elif [ $(uname -m) = "x86_64" ]; then
+                archdir="x64"
+                arch="amd64"
+        fi
+fi
+
+release=`$lxc lsb_release -c | cut -f 2`
+
+echo $ver
+echo $rel
+echo $lxc
+echo $archdir
+echo $arch
+echo $release
+
+$lxc rm -r /tmp/pgsql/
+$lxc mkdir /tmp/pgsql
+
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/libpq5_"$rel"-1.1C_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/"$archdir"/postgresql-client-"$ver"_"$rel"-1.1C_"$arch".deb
+$lxc wget --no-check-certificate -P /tmp/pgsql http://itprestige.us/download/pgsql/"$rel"/postgresql-client-common_154.1.1C_all.deb
+
+$lxc dpkg -i /tmp/pgsql/libpq5_"$rel"-1.1C_"$arch".deb
+$lxc dpkg -i /tmp/pgsql/postgresql-client-common_154.1.1C_all.deb
+$lxc dpkg -i /tmp/pgsql/postgresql-client-"$ver"_"$rel"-1.1C_"$arch".deb
+
+$lxc apt-get -f -y install
+}
+
+################################################################
+#
+# Резервное копирование сервера баз данных Postgres
+#
+################################################################
+
+pgsqlBackup(){
+#Принимает в качестве параметра полное имя сервера 1С: например 1c.cln где "1c" - сокрашенное имя, а "cln" - суффикс сервера
+   DATE=`/bin/date '+%d.%m.%Y'`
+   SERVER=$1
+
+   mkdir /backup/pgsql/$SERVER-$DATE
+   touch /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   touch /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+
+   psql -h $SERVER -U postgres -t -A -q -c "select datname from pg_database" > /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/template0/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/template1/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+   sed -i '/postgres/d' /backup/pgsql/$SERVER-$DATE/$SERVER.list
+
+   cat /backup/pgsql/$SERVER-$DATE/$SERVER.list | while read BASE
+   do
+      BASEPATH=$(echo $BASE | sed 's/ /-/g')
+      echo `date +"%T %d.%m.%Y"`." - Архивируем базу" $BASE "на сервере - "$SERVER >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+      pg_dump -h $SERVER -U postgres -Ft -w "$BASE" > /backup/pgsql/$SERVER-$DATE/"$BASEPATH".dump
+      echo `date +"%T %d.%m.%Y"`." - Архивирование базы [ЗАВЕРШЕНО]" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   done
+
+   echo "удаляем архивы, которым уже больше 10 дней" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   /usr/bin/find /backup/pgsql/ -type d -mtime +5 -print >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+   /usr/bin/find /backup/pgsql/ -type d -mtime +5 -exec rm -r {} \; >/dev/null 2>&1
+   echo `date +"%T %d.%m.%Y"`." - Процесс архивирования [ЗАВЕРШЕН]" >> /backup/pgsql/$SERVER-$DATE/$SERVER-backup.log
+}
+
+#####################################################################
+#
+# Восстановление сервера баз данных Postgres из резервной копии
+#
+#####################################################################
+
+pgsqlRestore(){
+
+   #apt-get install postgresql-client-9.1 postgresql-client-common -y
+   SRV_ARHIV=$1
+   SRV_RESTORE=$2
+   DATE=$3
+
+   touch /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_ARHIV-restore.log
+
+   cat /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_ARHIV.list | while read BASE
+   do
+      BASEPATH=$(echo $BASE | sed 's/ /-/g')
+      echo $BASE - $DATE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      echo "Удаление базы" $BASE "с сервера - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      dropdb -h $SRV_RESTORE -U postgres -w "$BASE"
+      echo "Создаем базу" $BASE "на сервере - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      createdb -h $SRV_RESTORE -U postgres -w "$BASE"
+      echo "Восстановить базу" $BASE "на сервере - "$SRV_RESTORE >> /backup/pgsql/$SRV_ARHIV-$DATE/$SRV_RESTORE-restore.log
+      pg_restore -h $SRV_RESTORE -U postgres -w -d "$BASE" /backup/pgsql/$SRV_ARHIV-$DATE/"$BASEPATH".dump
+   done
+}
+
+
+#####################################################################
+#
+# Сменить пароль пользователя postgres базы данных Postgres
+#
+#####################################################################
+
+pgsqlPass(){
+# Примеры запуска функции:
+# pgsqlPass Buhu4etPostgres - меняет парользователя в текущей машине
+# pgsqlPass Buhu4etPostgres lxc 1c - меняет пароль полязователя в контейнере lxc
+# Первый аргумент - пароль, второй аргумент - имя контейнера.
+
+# Функция построена на команде, смотри пример ниже:
+# psql -h 1c.buhu4et.cln.su -U postgres -c "alter user postgres with password 'Buhu4etPostgres';"
+
+if [ $2 = "lxc" ]; then
+        lxc="lxc-attach -n "$3" --"
+else
+        lxc=''
+fi
+
+echo $lxc
+
+$lxc sed -i '/local/s/peer/trust/g' /etc/postgresql/9.2/main/pg_hba.conf
+$lxc service postgresql restart
+
+$lxc psql -U postgres -c "alter user postgres with password '$1';"
+
+$lxc sed -i '/local/s/trust/peer/g' /etc/postgresql/9.2/main/pg_hba.conf
+$lxc service postgresql restart
+
+}
+
+mxAccountsTmp(){
+
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+$lxc su - zimbra -c "zmprov -lgaa" | sed '/galsync/d; /ham./d; /spam./d; /virus-/d' | while read account 
+do
+echo $account" | OK" >> /tmp/test
+done
+}
+
+mxAccountsSave(){
+
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+mkdir /tmp/postfix
+mount /dev/vg0/"$2" /tmp/"$2"
+
+cat /tmp/test | column -t -s '|' > /tmp/"$2"/etc/postfix/mydom_real_rec
+$lxc postmap hash:/etc/postfix/mydom_real_rec
+$lxc service postfix restart
+
+umount /tmp/"$2"
+rm -r /tmp/"$2"
+rm /tmp/test
+}
+
+#####################################################################
+#
+# Установка сервера TFTP
+#
+#####################################################################
+
+tftpInstall(){
+# Примеры запуска функции:
+
+# tftpInstall lxc tftp
+#  lxc - параметр говорит что ставим в контейнер
+#  tftp - имя контейнера
+
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+$lxc sh -c 'echo "TFTP_USERNAME=\"tftp\"
+TFTP_DIRECTORY=\"/tftpboot\"
+TFTP_ADDRESS=\"0.0.0.0:69\"
+TFTP_OPTIONS=\"-s -c -l\"" > /etc/default/tftpd-hpa'
+
+$lxc apt-get -y install tftpd-hpa
+
+#$lxc sh -c 'echo "TFTP_USERNAME="tftp"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_DIRECTORY="/tftpboot"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_ADDRESS="0.0.0.0:69"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_OPTIONS="-s -c -l"" > /etc/default/tftpd-hpa'
+
+$lxc mkdir /tftpboot
+$lxc chmod -R 777 /tftpboot
+$lxc chown -R nobody /tftpboot
+$lxc service tftpd-hpa restart
+}
+
+#####################################################################
+#
+# Установка сервера TFTP
+#
+#####################################################################
+
+tftpInstall(){
+# Примеры запуска функции:
+
+# tftpInstall lxc tftp
+#  lxc - параметр говорит что ставим в контейнер
+#  tftp - имя контейнера
+
+if [ $1 = "lxc" ]; then
+        lxc="lxc-attach -n "$2" --"
+else
+        lxc=''
+fi
+
+$lxc sh -c 'echo "TFTP_USERNAME="tftp"
+TFTP_DIRECTORY="/tftpboot"
+TFTP_ADDRESS="0.0.0.0:69"
+TFTP_OPTIONS="-s -c -l"" > /etc/default/tftpd-hpa'
+
+$lxc apt-get -y install tftpd-hpa
+
+#$lxc sh -c 'echo "TFTP_USERNAME="tftp"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_DIRECTORY="/tftpboot"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_ADDRESS="0.0.0.0:69"" > /etc/default/tftpd-hpa'
+#$lxc sh -c 'echo "TFTP_OPTIONS="-s -c -l"" > /etc/default/tftpd-hpa'
+
+$lxc mkdir /tftpboot
+$lxc chmod -R 777 /tftpboot
+$lxc chown -R nobody /tftpboot
+$lxc service tftpd-hpa restart
+}
+
+#####################################################################
+#
+# Функция меняет пароли у пользователей SAMBA
+#
+#####################################################################
+smbPassChange(){
+# Примеры запуска функции:
+
+# smbPassChange ss 0987654321 lxc smb
+#  ss - имя пользователя
+#  0987654321 - пароль пользователя
+#  lxc - параметр говорит что меняем пароли в контейнер
+#  1с.ss.cln.su - полное имя хоста имя контейнера вычисляется автоматически
+
+if [ $3 = "lxc" ]; then
+        lxc="lxc-attach -n "$4" --"
+else
+        lxc=''
+fi
+
+user_name=$1
+user_pass=$2
+
+$lxc sh -c 'echo "'$user_name'":"'$user_pass'" | chpasswd'
+$lxc sh -c 'echo {'$user_pass'} | tee - | (smbpasswd -a -s '$user_name')'
+}
+
+#####################################################################
+#
+# Функция копирует публичный ключ SSH на удаленный сервер
+#
+#####################################################################
+sshKey(){
+# Примеры запуска функции:
+
+# smbPassChange ss 0987654321 lxc smb
+#  ss - имя пользователя
+#  0987654321 - пароль пользователя
+#  lxc - параметр говорит что меняем пароли в контейнер
+#  1с.ss.cln.su - полное имя хоста имя контейнера вычисляется автоматически
+
+user_name=$1
+user_pass=$2
+
+scp -P22222 /root/.ssh/id_rsa.pub  neon@gwo.ss.cln.su:/tmp/id_rsa.pub
+
+}
+
+#####################################################################
+#
+# Функция устанавливает VNC сервер на рабочий компьютер
+#
+#####################################################################
+vncInstall() {
+# Примеры запуска функции:
+
+# vncInstall password
+#  password - пароль пользователя
+
+ apt-get purge vino -y
+ apt-get install x11vnc -y
+
+ mkdir /etc/x11vnc
+ chmod 755 /etc/x11vnc
+
+ sudo x11vnc -storepasswd "$1" /etc/x11vnc/passwd
+ chmod 644 /etc/x11vnc/passwd
+
+ cat > /etc/init/x11vnc.conf <<_EOF
+start on login-session-start
+script
+x11vnc -xkb -bg \
+ -noxrecord \
+ -noxfixes \
+ -noxdamage \
+ -display :0 \
+ -auth /var/run/lightdm/root/:0 \
+ -rfbauth /etc/x11vnc/passwd \
+ -forever \
+ -o /var/log/x11vnc.log
+end script
+_EOF
+}
+

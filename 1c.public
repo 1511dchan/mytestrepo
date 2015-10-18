@@ -1,0 +1,36 @@
+#!/bin/bash
+a1=./myfunc ; source "$a1" ; if [ $? -ne 0 ] ; then echo "Ошибка — нет библиотеки функций $a1" 1>&2 ; exit 1 ; fi
+
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su test x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su avalomus x32
+#f1cwww 1c-it 1c.it.cln.su san x32
+#f1cwww 1c-it 1c.it.cln.su sp x32
+#f1cwww 1c-it 1c.it.cln.su kp x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su imr x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su avers x32
+#f1cwww 1c-it 1c.it.cln.su logistic x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su 50-region x32
+#f1cwww 1c-it 1c.it.cln.su logistic-test x32
+#f1cwww 1c-it 1c.it.cln.su rgv x32
+
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su omikron x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su kliniclazer x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su noviy_rsk x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su isidatd x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su noviyrsk x32
+
+#f1cwww 1c-it 1c.it.cln.su clientn75 x32
+#f1cwww 1c-it 1c.it.cln.su grm x32
+#f1cwww 1c-gb 2c.it.cln.su clientn75 x32
+#f1cwww 1c-gb 2c.it.cln.su clientn75-2 x32
+
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su co1 x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su gustoff x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su ipkuchinskaay x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su iss x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su stilekstra x32
+#f1cwww 1c-buhu4et 1c.buhu4et.cln.su volna x32
+
+#f1cwww 1c-it 1c.it.cln.su retaildemo x32
+#f1cwww 1c-it 1c.it.cln.su tradedemo x32
+f1cwww 1c-it 1c.it.cln.su utdemo x32
